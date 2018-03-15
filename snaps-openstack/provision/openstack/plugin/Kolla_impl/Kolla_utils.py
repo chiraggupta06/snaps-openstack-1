@@ -67,6 +67,8 @@ def main(config, operation):
   __create_global(config, git_branch,pull_from_hub)
   hostname_map=__get_hostname_map(config)
   host_node_type_map= __create_host_nodetype_map(config)
+  host_storage_node_map = __create_host_storage_node_map(config, host_node_type_map)
+  logger.info(host_storage_node_map)
   logger.info("**************MULTINODE INVENTORY FILE******************")
   __create_inventory_multinode(config,host_node_type_map)
   logger.info("**************DOCKER DAEMON JSON ***********************")
@@ -95,8 +97,6 @@ def main(config, operation):
   logger.info(ip_pool_start)
   ip_pool_end=networks.get("external").get("ip_pool").get("end")
   logger.info(ip_pool_end)
-  second_storage= config.get(consts.OPENSTACK ).get(consts.KOLLA).get("second_storage")
-  logger.info(second_storage)
   base_size= config.get(consts.OPENSTACK ).get(consts.KOLLA).get(consts.BASE_SIZE)
   logger.info(base_size)
   count= config.get(consts.OPENSTACK ).get(consts.KOLLA).get(consts.COUNT)
@@ -113,7 +113,7 @@ def main(config, operation):
        hostCpuMap[interfaceData.get('ip')] = hostData.get('isolcpus')
        reserve_memory[interfaceData.get('ip')] = hostData.get('reserved_host_memory_mb')
 
-  ansible_configuration.launch_provisioning_kolla(iplist,git_branch,kolla_tag,kolla_ansible_tag,credential_dic,hostname_map,host_node_type_map,docker_registry,docker_port,kolla_base,kolla_install,ext_sub,ext_gw,ip_pool_start,ip_pool_end,second_storage, operation, hostCpuMap, reserve_memory,base_size,count,default,vxlan,pull_from_hub)
+  ansible_configuration.launch_provisioning_kolla(iplist,git_branch,kolla_tag,kolla_ansible_tag,credential_dic,hostname_map,host_node_type_map,docker_registry,docker_port,kolla_base,kolla_install,ext_sub,ext_gw,ip_pool_start,ip_pool_end,operation, hostCpuMap, reserve_memory,base_size,count,default,vxlan,pull_from_hub, host_storage_node_map)
   BASE_FILE_PATH=consts.KOLLA_SOURCE_PATH
   FILES={"globals.yml","daemon.json","netvars.yml","inventory/multinode"}
   for i in FILES:
@@ -358,6 +358,26 @@ def __create_host_nodetype_map(config):
  return hostnode_map
 
 
+def __create_host_storage_node_map(config, host_node_type_map):
+ if config:
+  host_storage_node_map={}
+  hosts=config.get(consts.OPENSTACK).get(consts.HOSTS)
+  host_ip=""
+  
+  for key,value in host_node_type_map.iteritems():
+    if('storage' in value):
+      host_ip=key;
+    for i in range(len(hosts)):
+      interfaces=hosts[i].get(consts.HOST).get(consts.INTERFACES)
+      node_type=hosts[i].get(consts.HOST).get(consts.NODE_TYPE)
+      second_storage=hosts[i].get(consts.HOST).get(consts.SECOND_STORAGE)
+      for i in range(len(interfaces)):
+        ip=interfaces[i].get(consts.IP)
+        if ip is host_ip:
+          host_storage_node_map[host_ip]=second_storage
+
+ return host_storage_node_map 
+
 
 
 def __create_inventory_multinode(config,host_node_type_map):
@@ -389,6 +409,8 @@ def __validate_configuration(config):
  :return : none or list of the ips
  """
  valid=True
+ #variable to check storage node config in complete hosts list
+ second_storage_config_present = False
  config_dict = config.get(consts.OPENSTACK)
  logger.debug("Starting validation")
  ip_list = []
@@ -409,6 +431,9 @@ def __validate_configuration(config):
   logger.debug("**********HOST INFORMATION************")
   logger.debug(host)
   host_dict = host.get(consts.HOST)
+  #variable to check the storage node config per host
+  is_storage_present       = False
+  is_storage_list_present  = False
   for key,value in host_dict.iteritems():
     if key=="interfaces":
      if len(value) < 2:
@@ -446,18 +471,39 @@ def __validate_configuration(config):
     elif key=="password" and value==None:
      logger.error("password must be defined")
      valid=False
-    #elif key=="node_type":
-     #if not (value=="controller" or value=="compute" or value=="all" or value=="network" or value=="volume") :
-      #valid=False
-      #logger.error("Node type must be \"controller\"  \"compute\" \"all\"")
-
-     logger.debug(value)
-
     elif key=="user":
      if value==None:
       logger.error("User must be defined")
       valid=False
+    elif key == "node_type":
+      logger.info(value)
+      if('storage' in value):
+        is_storage_present = True
+    elif key=="second_storage":
+      if ((value==None) and ("ceph" in config.get(consts.OPENSTACK ).get(consts.SERVICES))):
+        logger.info("SECOND STORAGE IS NOT DEFINED WHILE USING CEPH")
+        valid=False
+      else:
+        logger.info(value)
+        is_storage_list_present = True
+    
+    #check if storage node configuration is present for this host, mark the variable as true
+    if((is_storage_list_present == True) and (is_storage_present == True)):
+      second_storage_config_present = True
+      
  
+  if(("ceph" in config.get(consts.OPENSTACK ).get(consts.SERVICES))): 
+    if(((is_storage_present == False) and (is_storage_list_present == True)) or 
+       ((is_storage_present == True) and (is_storage_list_present == False))):
+      logger.info("Error: When ceph is enabled Storage node_type(" '%s' ") and second_storage(" '%s' ") both should be present", is_storage_present, is_storage_list_present)
+      valid=False
+      exit(1)
+
+ if((second_storage_config_present == False) and ("ceph" in config.get(consts.OPENSTACK ).get(consts.SERVICES))): 
+   logger.info("Error: When ceph is enabled storage node_type and second_storage shall be present in one of the host")
+   valid = False
+   exit(1)
+    
  if (config_dict.get(consts.KOLLA).get(consts.BASE_DISTRIBUTION)==None):
    logger.info("KOLLA_BASE_DISTRO CANNOT BE NULL")
    valid=False
@@ -482,9 +528,6 @@ def __validate_configuration(config):
    valid=False
  if (config_dict.get(consts.KOLLA).get(consts.REGISTRY)==None):
    logger.info("KOLLA_REGISTRY CANNOT BE NULL")
-   valid=False
- if (config.get(consts.OPENSTACK ).get(consts.KOLLA).get("second_storage")is None and "ceph" in config.get(consts.OPENSTACK ).get(consts.SERVICES)):
-   logger.info("SECOND STORAGE IS NOT DEFINED WHILE USING CEPH")
    valid=False
  if valid:
   return ip_list
@@ -538,9 +581,10 @@ def clean_up(config, operation):
   list_ip,host_type = __hostip_list(config)
   docker_registry=config.get(consts.OPENSTACK ).get(consts.KOLLA).get(consts.REGISTRY)
   docker_port=config.get(consts.OPENSTACK ).get(consts.KOLLA).get(consts.KOLLA_REGISTRY_PORT)
-  second_storage= config.get(consts.OPENSTACK ).get(consts.KOLLA).get("second_storage")
   git_branch=config.get(consts.OPENSTACK).get(consts.GIT_BRANCH)
   pull_from_hub=config.get(consts.OPENSTACK).get(consts.KOLLA).get(consts.PULL_HUB)
+  host_node_type_map= __create_host_nodetype_map(config)
+  host_storage_node_map = __create_host_storage_node_map(config, host_node_type_map)
   if list_ip is None:
     logger.info("Not valid configurations")
     exit(1)
@@ -549,7 +593,7 @@ def clean_up(config, operation):
    logger.debug(list_ip)
    service_list=_getservice_list(config)
    logger.info(service_list)
-   ret = ansible_configuration.clean_up_kolla(list_ip,git_branch,docker_registry,docker_port,service_list, operation, second_storage,pull_from_hub)
+   ret = ansible_configuration.clean_up_kolla(list_ip,git_branch,docker_registry,docker_port,service_list, operation,pull_from_hub, host_storage_node_map)
    return ret
 
 def _getservice_list(config):

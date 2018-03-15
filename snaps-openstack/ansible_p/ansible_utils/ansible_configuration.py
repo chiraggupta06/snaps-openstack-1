@@ -85,7 +85,7 @@ def provision_preparation(list_ip, proxy_dict, git_branch, kolla_tag, kolla_ansi
     return ret
 
 
-def clean_up_kolla(list_ip,git_branch,docker_registry,docker_port,service_list, operation, second_storage,pull_from_hub):
+def clean_up_kolla(list_ip,git_branch,docker_registry,docker_port,service_list, operation, pull_from_hub, host_storage_node_map):
  """
  This method is responsible for the cleanup of openstack services
  :param list_ip: all the ip of nodes in list format
@@ -105,10 +105,15 @@ def clean_up_kolla(list_ip,git_branch,docker_registry,docker_port,service_list, 
     logger.info('FAILED IN CLEANUP')
     exit(1)
   if('cinder' in service_list):
-   ret_storage=ansible_playbook_launcher.__launch_ansible_playbook(list_ip,playbook_path_remove_storage,{'PROXY_DATA_FILE': PROXY_DATA_FILE, 'VARIABLE_FILE': VARIABLE_FILE, 'BASE_FILE_PATH':BASE_FILE_PATH, 'SECOND_STORAGE': second_storage})
-   if(ret_storage!=0):
-    logger.info('FAILED')
-    exit(1)
+   for key,value in host_storage_node_map.iteritems():
+     ip = key
+     second_storage = value
+     logger.info(ip)
+     logger.info(second_storage)
+     ret_storage=ansible_playbook_launcher.__launch_ansible_playbook(list_ip,playbook_path_remove_storage,{'target': ip, 'PROXY_DATA_FILE': PROXY_DATA_FILE, 'VARIABLE_FILE': VARIABLE_FILE, 'BASE_FILE_PATH':BASE_FILE_PATH, 'SECOND_STORAGE': second_storage})
+     if(ret_storage!=0):
+       logger.info('FAILED')
+       exit(1)
   if( operation is "cleanregistry" and pull_from_hub != "yes") :
      ret1=ansible_playbook_launcher.__launch_ansible_playbook(list_ip,playbook_path_remove_registry,{'target': docker_registry,'PROXY_DATA_FILE': PROXY_DATA_FILE, 'VARIABLE_FILE': VARIABLE_FILE})
      if(ret1!=0):
@@ -121,7 +126,7 @@ def clean_up_kolla(list_ip,git_branch,docker_registry,docker_port,service_list, 
      if(ret_image!=0):
         logger.info('Image cleanup problems might be there')
 
-def launch_provisioning_kolla(iplist,git_branch,kolla_tag,kolla_ansible_tag,cred_dict,host_name_map,host_node_type_map,docker_registry,docker_port,kolla_base,kolla_install,ext_sub,ext_gw,ip_pool_start,ip_pool_end,second_storage, operation, hostCpuMap, reserve_memory,base_size,count,default,vxlan,pull_from_hub):
+def launch_provisioning_kolla(iplist,git_branch,kolla_tag,kolla_ansible_tag,cred_dict,host_name_map,host_node_type_map,docker_registry,docker_port,kolla_base,kolla_install,ext_sub,ext_gw,ip_pool_start,ip_pool_end,operation, hostCpuMap, reserve_memory,base_size,count,default,vxlan,pull_from_hub, host_storage_node_map):
  ret = False
  playbook_path_sethosts=consts.KOLLA_SET_HOSTS
  playbook_path_sethostname=consts.KOLLA_SET_HOSTSNAME
@@ -246,12 +251,15 @@ def launch_provisioning_kolla(iplist,git_branch,kolla_tag,kolla_ansible_tag,cred
         ret_storage=None
         if list_storage:
            for storage_ip in list_storage:
-            ret_storage= ansible_playbook_launcher.__launch_ansible_playbook(iplist,
-                         playbook_path_launch_storage,{'target': storage_ip,
-                         'PROXY_DATA_FILE': PROXY_DATA_FILE, 'VARIABLE_FILE': VARIABLE_FILE,
-                         'SECOND_STORAGE': second_storage, 'BASE_FILE_PATH':BASE_FILE_PATH, 'OPERATION': operation, 'BASE_SIZE': base_size, 'COUNT': count})
+             for key,value in host_storage_node_map.iteritems():
+               if key is storage_ip:
+                 second_storage=value 
+                 ret_storage= ansible_playbook_launcher.__launch_ansible_playbook(iplist,
+                              playbook_path_launch_storage,{'target': storage_ip,
+                              'PROXY_DATA_FILE': PROXY_DATA_FILE, 'VARIABLE_FILE': VARIABLE_FILE,
+                              'SECOND_STORAGE': second_storage, 'BASE_FILE_PATH':BASE_FILE_PATH, 'OPERATION': operation, 'BASE_SIZE': base_size, 'COUNT': count})
 
-            if(ret_storage !=0):
+           if(ret_storage !=0):
                 logger.info("FAILED IN SETTING STORAGE")
                 exit(1)
 
@@ -317,6 +325,14 @@ def launch_provisioning_kolla(iplist,git_branch,kolla_tag,kolla_ansible_tag,cred
 
  else:
         logger.info('ALL IN ONE DEPLOYEMENT')
+        if(len(host_storage_node_map)==1):
+          second_storage=host_storage_node_map.values()[0]
+          logger.info(host_storage_node_map)
+          logger.info(second_storage)
+        else:
+          logger.info("Failed in creating storage map")
+	  exit(1)
+
         if git_branch.lower() == 'stable/newton':
          ret_all=ansible_playbook_launcher.__launch_ansible_playbook(list_all,playbook_path_launch_single_node,{ 'DOCKER_OPTS' : DOCKER_OPTS , 'DOCKER_REGISTRY_IP' : DOCKER_REGISTRY_IP , 'kolla_base' : kolla_base , 'kolla_install' : kolla_install, 'PROXY_DATA_FILE': PROXY_DATA_FILE, 'VARIABLE_FILE': VARIABLE_FILE,'BASE_FILE_PATH':BASE_FILE_PATH,'EXT_SUB':ext_sub,'EXT_GW':ext_gw,'START_IP':ip_pool_start,'END_IP':ip_pool_end,'SECOND_STORAGE': second_storage, 'BASE_SIZE': base_size, 'COUNT': count,'DEFAULT': default,'VXLAN': vxlan, 'GIT_BRANCH':git_branch, 'KOLLA_TAG':kolla_tag, 'KOLLA_ANSIBLE_TAG':kolla_ansible_tag, 'PULL_HUB': pull_from_hub})
          if (ret_all!=0):
