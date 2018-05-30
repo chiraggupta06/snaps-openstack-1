@@ -104,7 +104,7 @@
        - nova-compute
 
     - name : Modify /etc/kolla/neutron-sriov-agent/sriov_agent.ini file for SRIOV
-      shell: find /etc/kolla/neutron-sriov-agent/sriov_agent.ini -exec sed -i -e 's/physical_device_mappings = sriovnet1:eno1/physical_device_mappings = {{ SRIOV_STRING }}/g' {} \;
+      shell: find /etc/kolla/neutron-sriov-agent/sriov_agent.ini -exec sed -i -e 's/physical_device_mappings = sriovnet1\(.*\)$/physical_device_mappings = {{ SRIOV_STRING }}/g' {} \;
       when: enable_neutron_sriov == "yes"
 
     - name: check values for MTU parameters
