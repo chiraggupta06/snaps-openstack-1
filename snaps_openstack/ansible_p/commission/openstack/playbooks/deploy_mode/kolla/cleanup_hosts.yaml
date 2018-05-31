@@ -75,3 +75,12 @@
         state: absent
         path: /etc/kolla/config
       ignore_errors: True
+    - lineinfile:
+       destfile: /etc/modules
+       state: absent
+       regexp:  'vfio_pci'
+
+    - lineinfile:
+       destfile: /etc/modules
+       state: absent
+       regexp:  'uio_pci_generic'
