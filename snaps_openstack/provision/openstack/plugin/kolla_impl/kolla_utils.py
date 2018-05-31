@@ -380,8 +380,8 @@ def __create_global(config, git_branch, pull_from_hub):
             if services == 'ceilometer':
                 filedata = filedata.replace('#enable_ceilometer: "no"',
                                             'enable_ceilometer: "yes"')
-		filedata = filedata.replace('#enable_gnocchi: "no"',
-				            'enable_gnocchi: "yes"')
+                filedata = filedata.replace('#enable_gnocchi: "no"',
+                                            'enable_gnocchi: "yes"')
             if services == 'tempest':
                 filedata = filedata.replace('#enable_tempest: "no"',
                                             'enable_tempest: "yes"')
