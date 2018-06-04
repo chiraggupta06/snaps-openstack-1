@@ -413,7 +413,7 @@ def __create_global(config, git_branch, pull_from_hub):
                                             'enable_barbican: "yes"')
             
             if services == 'sriov':
-                filedata = filedata.replace('#enable_neutron_sriov: "no"',
+                filedata = filedata.replace('enable_neutron_sriov: "no"',
                                              'enable_neutron_sriov: "yes"')
             if services == 'dpdk':
                 filedata = filedata.replace('#ovs_datapath: "netdev"',

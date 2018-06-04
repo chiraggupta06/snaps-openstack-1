@@ -346,12 +346,14 @@ def launch_provisioning_kolla(iplist, git_branch, kolla_tag, kolla_ansible_tag,
                      sriov_interface=value
                      nova_str = ""
                      sriov_str = ""
-                     for iface in sriov_interface:
-                       nova_str = nova_str +  "{\"devname\":\"" + iface +"\", \"physical_network\": \"physnet1\"},"
-                       sriov_str = sriov_str+"physnet1:"+iface+","
+                    
+                     if sriov_interface is not None: 
+                       for iface in sriov_interface:
+                         nova_str = nova_str +  "{\"devname\":\"" + iface +"\", \"physical_network\": \"physnet1\"},"
+                         sriov_str = sriov_str+"physnet1:"+iface+","
 
-                     sriov_str = sriov_str.rstrip(",")
-                     nova_str = "[" + nova_str.rstrip(",") + "]"
+                       sriov_str = sriov_str.rstrip(",")
+                       nova_str = "[" + nova_str.rstrip(",") + "]"
 
                 multi_node_pb = pkg_resources.resource_filename(
                     consts.KOLLA_PB_PKG,
@@ -400,12 +402,13 @@ def launch_provisioning_kolla(iplist, git_branch, kolla_tag, kolla_ansible_tag,
                    sriov_interface=value
                    nova_str = ""
                    sriov_str = ""
-                   for iface in sriov_interface:
-                     nova_str = nova_str +  "{\"devname\":\"" + iface +"\", \"physical_network\": \"physnet1\"},"
-                     sriov_str = sriov_str+"physnet1:"+iface+","
+                   if sriov_interface is not None: 
+                       for iface in sriov_interface:
+                         nova_str = nova_str +  "{\"devname\":\"" + iface +"\", \"physical_network\": \"physnet1\"},"
+                         sriov_str = sriov_str+"physnet1:"+iface+","
 
-                   sriov_str = sriov_str.rstrip(",")
-                   nova_str = "[" + nova_str.rstrip(",") + "]"
+                       sriov_str = sriov_str.rstrip(",")
+                       nova_str = "[" + nova_str.rstrip(",") + "]"
 
             vcpu_pin = host_cpu_map.get(node_ip)
             memory = reserve_memory.get(node_ip)
